@@ -9,13 +9,13 @@
     "prediction-markets"
   ],
   "license": "MIT",
-  "homepage": "https://github.com/vission/n8n-nodes-kalshi-trading",
+  "homepage": "https://github.com/Vission01/n8n-nodes-kalshi-trading",
   "author": {
-    "name": "vission"
+    "name": "Vission01"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/vission/n8n-nodes-kalshi-trading.git"
+    "url": "git+https://github.com/Vission01/n8n-nodes-kalshi-trading.git"
   },
   "main": "index.js",
   "files": [
