@@ -1,0 +1,49 @@
+{
+  "name": "n8n-nodes-kalshi-trading",
+  "version": "1.1.0",
+  "description": "n8n node for Kalshi trading and market data",
+  "keywords": [
+    "n8n-community-node-package",
+    "kalshi",
+    "trading",
+    "prediction-markets"
+  ],
+  "license": "MIT",
+  "homepage": "https://github.com/vission/n8n-nodes-kalshi-trading",
+  "author": {
+    "name": "vission"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vission/n8n-nodes-kalshi-trading.git"
+  },
+  "main": "index.js",
+  "files": [
+    "dist",
+    "index.js"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "format": "prettier nodes credentials --write",
+    "prepublishOnly": "npm run build"
+  },
+  "n8n": {
+    "n8nNodesApiVersion": 1,
+    "credentials": [
+      "dist/credentials/KalshiApi.credentials.js"
+    ],
+    "nodes": [
+      "dist/nodes/Kalshi/Kalshi.node.js"
+    ]
+  },
+  "devDependencies": {
+    "@types/node": "^18.19.0",
+    "n8n-workflow": "^1.0.0",
+    "prettier": "^2.7.1",
+    "typescript": "^5.9.3"
+  },
+  "peerDependencies": {
+    "n8n-workflow": "*"
+  }
+}
