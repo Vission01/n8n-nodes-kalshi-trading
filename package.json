@@ -23,7 +23,7 @@
     "index.js"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node -e \"require('fs').copyFileSync('nodes/Kalshi/kalshi.svg','dist/nodes/Kalshi/kalshi.svg')\"",
     "dev": "tsc --watch",
     "format": "prettier nodes credentials --write",
     "prepublishOnly": "npm run build"
