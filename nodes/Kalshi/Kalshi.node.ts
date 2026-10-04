@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import {
 	IExecuteFunctions,
 	INodeExecutionData,
@@ -54,7 +55,7 @@ export class Kalshi implements INodeType {
 				options: [
 					{ name: 'Get', value: 'get', description: 'Get a market by ticker', action: 'Get a market' },
 					{ name: 'Get Many', value: 'getAll', description: 'Get many markets', action: 'Get many markets' },
-					{ name: 'Get History', value: 'getHistory', description: 'Get market history', action: 'Get market history' },
+					{ name: 'Get History', value: 'getHistory', description: 'Get market price history (candlesticks)', action: 'Get market history' },
 					{ name: 'Get Orderbook', value: 'getOrderbook', description: 'Get market orderbook', action: 'Get market orderbook' },
 					{ name: 'Get Trades', value: 'getTrades', description: 'Get market trades', action: 'Get market trades' },
 				],
@@ -160,11 +161,12 @@ export class Kalshi implements INodeType {
 					{
 						displayName: 'Status', name: 'status', type: 'options',
 						options: [
-							{ name: 'Active', value: 'active' },
+							{ name: 'Open', value: 'open' },
+							{ name: 'Unopened', value: 'unopened' },
 							{ name: 'Closed', value: 'closed' },
 							{ name: 'Settled', value: 'settled' },
 						],
-						default: 'active', description: 'Filter by market status',
+						default: 'open', description: 'Filter by market status',
 					},
 					{ displayName: 'Limit', name: 'limit', type: 'number', default: 100, description: 'Max number of results to return' },
 					{ displayName: 'Cursor', name: 'cursor', type: 'string', default: '', description: 'Pagination cursor' },
@@ -174,7 +176,7 @@ export class Kalshi implements INodeType {
 				],
 			},
 
-			// Market History Options
+			// Market History (candlesticks) Options
 			{
 				displayName: 'History Options',
 				name: 'historyOptions',
@@ -183,10 +185,18 @@ export class Kalshi implements INodeType {
 				default: {},
 				displayOptions: { show: { resource: ['market'], operation: ['getHistory'] } },
 				options: [
-					{ displayName: 'Limit', name: 'limit', type: 'number', default: 100, description: 'Max number of results' },
-					{ displayName: 'Cursor', name: 'cursor', type: 'string', default: '', description: 'Pagination cursor' },
-					{ displayName: 'Min TS', name: 'min_ts', type: 'number', default: 0, description: 'Minimum timestamp' },
-					{ displayName: 'Max TS', name: 'max_ts', type: 'number', default: 0, description: 'Maximum timestamp' },
+					{ displayName: 'Series Ticker', name: 'series_ticker', type: 'string', default: '', description: 'Series of the market (e.g. KXTEMPNYCHS). Looked up automatically when empty.' },
+					{
+						displayName: 'Period', name: 'period_interval', type: 'options',
+						options: [
+							{ name: '1 Minute', value: 1 },
+							{ name: '1 Hour', value: 60 },
+							{ name: '1 Day', value: 1440 },
+						],
+						default: 60, description: 'Candlestick length',
+					},
+					{ displayName: 'Start TS', name: 'start_ts', type: 'number', default: 0, description: 'Start time (Unix seconds). Defaults to 24 hours ago.' },
+					{ displayName: 'End TS', name: 'end_ts', type: 'number', default: 0, description: 'End time (Unix seconds). Defaults to now.' },
 				],
 			},
 
@@ -311,9 +321,10 @@ export class Kalshi implements INodeType {
 				displayName: 'Price (Cents)',
 				name: 'price',
 				type: 'number',
+				typeOptions: { minValue: 1, maxValue: 99 },
 				displayOptions: { show: { resource: ['order'], operation: ['create'], type: ['limit'] } },
 				default: 50,
-				description: 'Limit price in cents (1-99)',
+				description: 'Limit price in cents (1-99) for the selected side. E.g. Side "No" at 90 buys NO contracts at 90¢.',
 			},
 			{
 				displayName: 'Order Options',
@@ -323,9 +334,19 @@ export class Kalshi implements INodeType {
 				default: {},
 				displayOptions: { show: { resource: ['order'], operation: ['create'] } },
 				options: [
-					{ displayName: 'Expiration TS', name: 'expiration_ts', type: 'number', default: 0, description: 'Order expiration timestamp' },
-					{ displayName: 'Client Order ID', name: 'client_order_id', type: 'string', default: '', description: 'Custom order ID' },
-					{ displayName: 'Sell Position Floor', name: 'sell_position_floor', type: 'number', default: 0, description: 'Minimum position to maintain' },
+					{
+						displayName: 'Time In Force', name: 'time_in_force', type: 'options',
+						options: [
+							{ name: 'Good Till Canceled', value: 'good_till_canceled' },
+							{ name: 'Immediate or Cancel', value: 'immediate_or_cancel' },
+							{ name: 'Fill or Kill', value: 'fill_or_kill' },
+						],
+						default: 'good_till_canceled', description: 'How long the order stays active. Market orders always use Immediate or Cancel.',
+					},
+					{ displayName: 'Expiration TS', name: 'expiration_ts', type: 'number', default: 0, description: 'Unix timestamp (seconds) when a Good Till Canceled order expires' },
+					{ displayName: 'Client Order ID', name: 'client_order_id', type: 'string', default: '', description: 'Custom order ID for deduplication (auto-generated when empty)' },
+					{ displayName: 'Post Only', name: 'post_only', type: 'boolean', default: false, description: 'Whether to reject the order if it would immediately match (maker only)' },
+					{ displayName: 'Reduce Only', name: 'reduce_only', type: 'boolean', default: false, description: 'Whether the order may only reduce an existing position (requires Immediate or Cancel)' },
 				],
 			},
 
@@ -338,6 +359,14 @@ export class Kalshi implements INodeType {
 				displayOptions: { show: { resource: ['order'], operation: ['cancel', 'decrease', 'get'] } },
 				default: '',
 				description: 'The order ID',
+			},
+			{
+				displayName: 'Market Ticker',
+				name: 'marketTicker',
+				type: 'string',
+				displayOptions: { show: { resource: ['order'], operation: ['cancel', 'decrease'] } },
+				default: '',
+				description: 'Ticker of the order\'s market. Recommended: lets Kalshi route the request to the right exchange shard.',
 			},
 			{
 				displayName: 'Reduce By',
@@ -382,7 +411,7 @@ export class Kalshi implements INodeType {
 				required: true,
 				displayOptions: { show: { resource: ['order'], operation: ['batchCreate'] } },
 				default: '[]',
-				description: 'Array of order objects to create',
+				description: 'JSON array of V2 order objects, e.g. [{"ticker":"…","side":"bid","count":"1.00","price":"0.5000","time_in_force":"good_till_canceled","self_trade_prevention_type":"taker_at_cross"}]. side: bid = buy YES, ask = sell YES (buy NO); price is the YES price in dollars.',
 			},
 
 			// Batch Order Cancel
@@ -413,9 +442,10 @@ export class Kalshi implements INodeType {
 						displayName: 'Count Filter', name: 'count_filter', type: 'options',
 						options: [
 							{ name: 'All', value: 'all' },
-							{ name: 'Non-Zero', value: 'non_zero' },
+							{ name: 'Open Position', value: 'position' },
+							{ name: 'Ever Traded', value: 'total_traded' },
 						],
-						default: 'all', description: 'Filter positions by count',
+						default: 'all', description: 'Only return positions with a non-zero open position or traded count',
 					},
 					{
 						displayName: 'Settlement Status', name: 'settlement_status', type: 'options',
@@ -473,13 +503,29 @@ export class Kalshi implements INodeType {
 						returnData.push(response);
 					}
 					if (operation === 'getHistory') {
+						// Kalshi replaced /markets/{ticker}/history with candlesticks under the series path.
 						const ticker = this.getNodeParameter('ticker', i) as string;
 						const options = this.getNodeParameter('historyOptions', i) as any;
-						const qs: any = {};
-						Object.keys(options).forEach((key) => {
-							if (options[key]) qs[key] = options[key];
-						});
-						const response = await kalshiApiRequest.call(this, 'GET', `/trade-api/v2/markets/${encodeURIComponent(ticker)}/history`, {}, qs);
+						let seriesTicker = (options.series_ticker as string) || '';
+						if (!seriesTicker) {
+							const marketRes = await kalshiApiRequest.call(this, 'GET', `/trade-api/v2/markets/${encodeURIComponent(ticker)}`);
+							const eventTicker = marketRes?.market?.event_ticker as string;
+							const eventRes = await kalshiApiRequest.call(this, 'GET', `/trade-api/v2/events/${encodeURIComponent(eventTicker)}`);
+							seriesTicker = eventRes?.event?.series_ticker || eventTicker.split('-')[0];
+						}
+						const now = Math.floor(Date.now() / 1000);
+						const qs = {
+							start_ts: options.start_ts || now - 86400,
+							end_ts: options.end_ts || now,
+							period_interval: options.period_interval || 60,
+						};
+						const response = await kalshiApiRequest.call(
+							this,
+							'GET',
+							`/trade-api/v2/series/${encodeURIComponent(seriesTicker)}/markets/${encodeURIComponent(ticker)}/candlesticks`,
+							{},
+							qs,
+						);
 						returnData.push(response);
 					}
 					if (operation === 'getOrderbook') {
@@ -491,11 +537,11 @@ export class Kalshi implements INodeType {
 					if (operation === 'getTrades') {
 						const ticker = this.getNodeParameter('ticker', i) as string;
 						const options = this.getNodeParameter('tradesOptions', i) as any;
-						const qs: any = {};
+						const qs: any = { ticker };
 						Object.keys(options).forEach((key) => {
 							if (options[key]) qs[key] = options[key];
 						});
-						const response = await kalshiApiRequest.call(this, 'GET', `/trade-api/v2/markets/${encodeURIComponent(ticker)}/trades`, {}, qs);
+						const response = await kalshiApiRequest.call(this, 'GET', '/trade-api/v2/markets/trades', {}, qs);
 						returnData.push(response);
 					}
 				}
@@ -526,28 +572,51 @@ export class Kalshi implements INodeType {
 						const count = this.getNodeParameter('count', i) as number;
 						const options = this.getNodeParameter('orderOptions', i) as any;
 
-						const body: any = { ticker, action, side, type, count };
-
+						// Kalshi V2 orders use a single YES book: "bid" buys YES, "ask" sells YES (= buys NO).
+						// The price is always the YES price in fixed-point dollars.
+						const bidYes = (action === 'buy' && side === 'yes') || (action === 'sell' && side === 'no');
+						let yesCents: number;
 						if (type === 'limit') {
-							body.yes_price = this.getNodeParameter('price', i) as number;
+							const sideCents = Number(this.getNodeParameter('price', i));
+							if (!(sideCents >= 1 && sideCents <= 99)) {
+								throw new NodeOperationError(this.getNode(), 'Price must be between 1 and 99 cents', { itemIndex: i });
+							}
+							yesCents = side === 'yes' ? sideCents : 100 - sideCents;
+						} else {
+							// Market order: cross the whole book, IOC so nothing rests.
+							yesCents = bidYes ? 99 : 1;
 						}
 
-						Object.keys(options).forEach((key) => {
-							if (options[key]) body[key] = options[key];
-						});
+						const body: any = {
+							ticker,
+							side: bidYes ? 'bid' : 'ask',
+							count: Number(count).toFixed(2),
+							price: (yesCents / 100).toFixed(4),
+							time_in_force: type === 'market' ? 'immediate_or_cancel' : options.time_in_force || 'good_till_canceled',
+							self_trade_prevention_type: 'taker_at_cross',
+							client_order_id: options.client_order_id || randomUUID(),
+						};
+						if (options.post_only) body.post_only = true;
+						if (options.reduce_only) body.reduce_only = true;
+						if (options.expiration_ts && body.time_in_force === 'good_till_canceled') body.expiration_time = options.expiration_ts;
 
-						const response = await kalshiApiRequest.call(this, 'POST', '/trade-api/v2/portfolio/orders', body);
+						const response = await kalshiApiRequest.call(this, 'POST', '/trade-api/v2/portfolio/events/orders', body);
 						returnData.push(response);
 					}
 					if (operation === 'cancel') {
 						const orderId = this.getNodeParameter('orderId', i) as string;
-						const response = await kalshiApiRequest.call(this, 'DELETE', `/trade-api/v2/portfolio/orders/${encodeURIComponent(orderId)}`);
+						const marketTicker = this.getNodeParameter('marketTicker', i, '') as string;
+						const qs: any = marketTicker ? { market_ticker: marketTicker } : {};
+						const response = await kalshiApiRequest.call(this, 'DELETE', `/trade-api/v2/portfolio/events/orders/${encodeURIComponent(orderId)}`, {}, qs);
 						returnData.push(response);
 					}
 					if (operation === 'decrease') {
 						const orderId = this.getNodeParameter('orderId', i) as string;
 						const reduceBy = this.getNodeParameter('reduceBy', i) as number;
-						const response = await kalshiApiRequest.call(this, 'POST', `/trade-api/v2/portfolio/orders/${encodeURIComponent(orderId)}/decrease`, { reduce_by: reduceBy });
+						const marketTicker = this.getNodeParameter('marketTicker', i, '') as string;
+						const body: any = { reduce_by: Number(reduceBy).toFixed(2) };
+						if (marketTicker) body.market_ticker = marketTicker;
+						const response = await kalshiApiRequest.call(this, 'POST', `/trade-api/v2/portfolio/events/orders/${encodeURIComponent(orderId)}/decrease`, body);
 						returnData.push(response);
 					}
 					if (operation === 'get') {
@@ -575,13 +644,17 @@ export class Kalshi implements INodeType {
 						if (!Array.isArray(orders)) {
 							throw new NodeOperationError(this.getNode(), 'Orders must be a JSON array', { itemIndex: i });
 						}
-						const response = await kalshiApiRequest.call(this, 'POST', '/trade-api/v2/portfolio/orders/batches', { orders });
+						const response = await kalshiApiRequest.call(this, 'POST', '/trade-api/v2/portfolio/events/orders/batched', { orders });
 						returnData.push(response);
 					}
 					if (operation === 'batchCancel') {
 						const orderIds = this.getNodeParameter('orderIds', i) as string;
-						const ids = orderIds.split(',').map((id: string) => id.trim());
-						const response = await kalshiApiRequest.call(this, 'DELETE', '/trade-api/v2/portfolio/orders/batches', { ids });
+						const orders = orderIds
+							.split(',')
+							.map((id: string) => id.trim())
+							.filter((id: string) => id)
+							.map((order_id: string) => ({ order_id }));
+						const response = await kalshiApiRequest.call(this, 'DELETE', '/trade-api/v2/portfolio/events/orders/batched', { orders });
 						returnData.push(response);
 					}
 				}
@@ -593,6 +666,9 @@ export class Kalshi implements INodeType {
 						Object.keys(filters).forEach((key) => {
 							if (filters[key]) qs[key] = filters[key];
 						});
+						// 'all' means no filter; 'non_zero' was the pre-1.2 value and is not accepted by Kalshi.
+						if (qs.count_filter === 'all') delete qs.count_filter;
+						if (qs.count_filter === 'non_zero') qs.count_filter = 'position';
 						const response = await kalshiApiRequest.call(this, 'GET', '/trade-api/v2/portfolio/positions', {}, qs);
 						returnData.push(response);
 					}

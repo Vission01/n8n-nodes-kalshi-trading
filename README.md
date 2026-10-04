@@ -1,409 +1,313 @@
-# n8n-nodes-kalshi
+# n8n-nodes-kalshi-trading
 
-[![npm version](https://img.shields.io/npm/v/n8n-nodes-kalshi.svg)](https://www.npmjs.com/package/n8n-nodes-kalshi)
-[![npm downloads](https://img.shields.io/npm/dm/n8n-nodes-kalshi.svg)](https://www.npmjs.com/package/n8n-nodes-kalshi)
+[![npm version](https://img.shields.io/npm/v/n8n-nodes-kalshi-trading.svg)](https://www.npmjs.com/package/n8n-nodes-kalshi-trading)
+[![npm downloads](https://img.shields.io/npm/dm/n8n-nodes-kalshi-trading.svg)](https://www.npmjs.com/package/n8n-nodes-kalshi-trading)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-This is an n8n community node that lets you interact with the [Kalshi](https://kalshi.com) prediction markets API in your n8n workflows.
+An [n8n](https://n8n.io) community node for the [Kalshi](https://kalshi.com) prediction-market API. Use it to:
 
-[Kalshi](https://kalshi.com) is a federally regulated prediction market exchange where you can trade on real-world events. This node enables you to:
+- 📊 Read markets, events, order books, trades and price history (candlesticks)
+- 💰 Place, cancel, decrease and batch orders (Kalshi V2 order endpoints)
+- 📈 Check balance, positions and fills
+- 🤖 Build automated trading workflows
 
-- 📊 Fetch market data and prices
-- 💰 Place and manage orders
-- 📈 Monitor your portfolio
-- 🔍 Scan markets for opportunities
-- 🤖 Build automated trading strategies
-- 📉 Analyze historical data
-
-[n8n](https://n8n.io/) is a fair-code licensed workflow automation platform.
+Requests are signed locally with your Kalshi API key (RSA or Ed25519). Your private key is never sent to Kalshi.
 
 ---
 
-
 ## Installation
 
-### Via n8n Community Nodes (Recommended)
+### n8n Community Nodes (recommended)
 
-1. Go to **Settings > Community Nodes** in n8n
-2. Select **Install**
-3. Enter `n8n-nodes-kalshi` in **Enter npm package name**
-4. Agree to the risks and click **Install**
+1. In n8n, go to **Settings > Community Nodes**
+2. Click **Install**
+3. Enter `n8n-nodes-kalshi-trading`
+4. Accept the risk notice and click **Install**
 
-### Manual Installation
+See the n8n guide: [Install community nodes](https://docs.n8n.io/integrations/community-nodes/installation/).
+
+### Manual installation (self-hosted)
 
 ```bash
-npm install n8n-nodes-kalshi
+cd ~/.n8n/nodes
+npm install n8n-nodes-kalshi-trading
+# restart n8n
 ```
 
 ---
 
 ## Credentials
 
-### Creating an API Key
+### Create an API key
 
-Kalshi API keys are separate for each environment (a demo key will not work in production).
+Kalshi API keys belong to one environment. A demo key will not work in production, and vice versa.
 
-1. Log in to [demo.kalshi.co](https://demo.kalshi.co) (testing, no real money) or [kalshi.com](https://kalshi.com) (real trading)
+1. Log in to [demo.kalshi.co](https://demo.kalshi.co) (testing, no real money) or [kalshi.com](https://kalshi.com) (real money)
 2. Go to **Account & security > API Keys** and click **Create Key**
-3. Save the **API Key ID** and the downloaded **private key** (PEM file). The private key cannot be retrieved again.
+3. Save the **API Key ID** and the downloaded **private key** (PEM file). Kalshi will not show the private key again.
 
-### Setting Up in n8n
+Kalshi's guide: [Authenticated requests](https://docs.kalshi.com/getting_started/quick_start_authenticated_requests).
 
-1. In n8n, go to **Credentials > New**
-2. Search for **Kalshi API**
-3. Enter your credentials:
-   - **API Key ID:** The key ID shown by Kalshi
-   - **Private Key:** The full contents of the PEM file, including the `BEGIN`/`END` lines (RSA and Ed25519 keys are supported; encrypted keys are not)
-   - **Environment:** Demo or Production
-4. Click **Create**
+### Add the credential in n8n
 
-Each request is signed locally with your private key. The private key itself is never sent to Kalshi.
+1. Go to **Credentials > New** and search for **Kalshi API**
+2. Fill in:
+   - **API Key ID**: the key ID shown by Kalshi
+   - **Private Key**: the full PEM file contents, including the `BEGIN`/`END` lines (RSA and Ed25519 keys are supported; encrypted keys are not)
+   - **Environment**: **Demo** or **Production**. The environment is set here, on the credential, not on the node.
+3. Click **Save**
 
-**Security Note:** n8n encrypts stored credentials. Use a dedicated key for n8n and revoke it in Kalshi if it is ever exposed.
+> **Tip:** Keep two credentials ("Kalshi Demo" and "Kalshi Production") and switch a workflow between them to move from testing to live trading.
+
+> **Clock sync:** Kalshi rejects signed requests whose timestamp is more than a few seconds off (`header timestamp expired`). Make sure the machine running n8n keeps its clock synced (NTP).
 
 ---
 
 ## Operations
 
-### 📊 Market Resource
+### Market
 
 | Operation | Description |
 |-----------|-------------|
-| **Get Markets** | Retrieve multiple markets with extensive filters |
-| **Get Market** | Get detailed information about a specific market |
-| **Get Market Orderbook** | Get the current bid/ask spread and depth |
-| **Get Market Candlesticks** | Get historical price data |
-| **Get Trades** | Get recent trade history |
-| **Batch Get Candlesticks** | Get candlesticks for multiple markets |
+| **Get** | Get one market by ticker |
+| **Get Many** | List markets. Filters: series, event, status (`open`, `unopened`, `closed`, `settled`), min/max close time, ticker, limit, cursor |
+| **Get History** | Price history as candlesticks (1 minute, 1 hour or 1 day). The series ticker is looked up automatically if you leave it empty |
+| **Get Orderbook** | Current YES/NO bids, with optional depth |
+| **Get Trades** | Recent public trades for a market |
 
-### 📅 Event Resource
-
-| Operation | Description |
-|-----------|-------------|
-| **Get Events** | List all events with filters |
-| **Get Event** | Get detailed event information |
-| **Get Event Metadata** | Get event metadata and rules |
-| **Get Event Candlesticks** | Get candlestick data for an event |
-
-### 💰 Order Resource
+### Event
 
 | Operation | Description |
 |-----------|-------------|
-| **Create Order** | Place a new order (market or limit) |
-| **Get Orders** | Retrieve your orders with filters |
-| **Get Order** | Get details of a specific order |
-| **Cancel Order** | Cancel an existing order |
-| **Batch Create Orders** | Create multiple orders at once |
-| **Batch Cancel Orders** | Cancel multiple orders at once |
-| **Amend Order** | Modify an existing order |
-| **Decrease Order** | Decrease the quantity of an order |
+| **Get** | Get one event by ticker |
+| **Get Many** | List events, filtered by series and status |
 
-### 📈 Portfolio Resource
+### Order
 
 | Operation | Description |
 |-----------|-------------|
-| **Get Balance** | Get your account balance |
-| **Get Positions** | Get your current positions |
-| **Get Fills** | Get your order execution history |
-| **Get Settlements** | Get settlement history |
+| **Create** | Place a limit or market order |
+| **Cancel** | Cancel an order |
+| **Decrease** | Reduce the remaining quantity of an order |
+| **Get** | Get one order |
+| **Get Many** | List your orders, filtered by ticker, event or status |
+| **Batch Create** | Place several orders in one request |
+| **Batch Cancel** | Cancel several orders by ID |
 
-### 🏛️ Exchange Resource
-
-| Operation | Description |
-|-----------|-------------|
-| **Get Status** | Get current exchange status |
-| **Get Announcements** | Get exchange announcements |
-| **Get Schedule** | Get exchange operating schedule |
-
-### 📑 Series Resource
+### Position
 
 | Operation | Description |
 |-----------|-------------|
-| **Get Series List** | Get list of all series |
-| **Get Series** | Get detailed series information |
+| **Get Many** | Your positions. Filters: count (`All`, `Open Position`, `Ever Traded`), settlement status, ticker, event |
+
+### Portfolio
+
+| Operation | Description |
+|-----------|-------------|
+| **Get Balance** | Account balance |
+| **Get Fills** | Your executed trades |
+
+### Exchange
+
+| Operation | Description |
+|-----------|-------------|
+| **Get Status** | Whether the exchange and trading are active |
+| **Get Schedule** | Exchange trading hours |
 
 ---
 
-## Quick Start
+## Placing orders
 
-### 1. Get Exchange Status
+**Create Order** fields:
 
-Test your connection with a simple operation:
+| Field | Meaning |
+|-------|---------|
+| **Action** | `Buy` or `Sell` |
+| **Side** | `Yes` or `No` |
+| **Type** | `Limit`, or `Market`. Market orders always cross the book and use Immediate or Cancel |
+| **Count** | Number of contracts |
+| **Price (Cents)** | Limit price, 1–99, **for the side you selected**. Side `No` at `90` buys NO contracts at 90¢ |
+
+**Order Options**:
+
+| Option | Meaning |
+|--------|---------|
+| **Time In Force** | `Good Till Canceled` (default), `Immediate or Cancel`, or `Fill or Kill` |
+| **Expiration TS** | Unix time (seconds) when a Good Till Canceled order expires |
+| **Client Order ID** | Your own ID for deduplication. Generated automatically if empty |
+| **Post Only** | Reject the order if it would match immediately (maker only) |
+| **Reduce Only** | Only reduce an existing position (Kalshi requires Immediate or Cancel) |
+
+Under the hood the node uses Kalshi's [V2 order endpoint](https://docs.kalshi.com/api-reference/orders/create-order-v2). V2 has a single YES order book: buying YES is a `bid`, and buying NO is an `ask` (selling YES) at `100 − price`. The node handles this conversion for you. Kalshi explains it in [Order direction](https://docs.kalshi.com/getting_started/order_direction).
+
+For **Cancel** and **Decrease**, also fill in **Market Ticker** so Kalshi can route the request.
+
+**Batch Create** takes a JSON array of V2 order objects, for example:
+
+```json
+[
+  {
+    "ticker": "KXTEMPNYCHS-26OCT0400-T60.99",
+    "side": "bid",
+    "count": "1.00",
+    "price": "0.5000",
+    "time_in_force": "good_till_canceled",
+    "self_trade_prevention_type": "taker_at_cross"
+  }
+]
+```
+
+Here `side` is `bid` (buy YES) or `ask` (sell YES / buy NO), and `price` is the YES price in dollars.
+
+> **Note:** a new order can take a second or two to appear in **Order > Get** / **Get Many**. Use the `order_id` from the Create response right away; don't re-query immediately.
+
+---
+
+## Quick start
+
+### 1. Test the connection
 
 ```
-Resource: Exchange
+Resource:  Exchange
 Operation: Get Status
 ```
 
-### 2. Browse Markets
-
-See what's available to trade:
+### 2. Browse markets
 
 ```
-Resource: Market
-Operation: Get Markets
-Additional Fields:
-  Status: open
-  Limit: 100
+Resource:  Market
+Operation: Get Many
+Filters:   Series Ticker = KXTEMPNYCHS, Status = Open
 ```
 
-### 3. Place Your First Order (Demo Only!)
+### 3. Place your first order (use a Demo credential!)
 
 ```
-Resource: Order
-Operation: Create Order
-Ticker: MARKET-TICKER-HERE
-Action: buy
-Side: yes
-Type: limit
-Count: 1
-Yes Price: 50
+Resource:  Order
+Operation: Create
+Ticker:    <market ticker>
+Action:    Buy
+Side:      Yes
+Type:      Limit
+Count:     1
+Price:     50
 ```
 
 ---
 
-## Example Workflows
+## Example workflows
 
-### 1. Price Monitoring Bot
+**Price alert:** Schedule Trigger → Kalshi *Market > Get* → IF (price crosses your level) → Email/Slack.
 
-Monitor a market and get alerted when price moves:
+**Automated strategy:** Schedule Trigger → Kalshi *Market > Get Many* (use *Max Close TS* to fetch only markets closing soon) → Kalshi *Position > Get Many* (skip markets you already hold) → Code (your rules) → Kalshi *Order > Create* (Immediate or Cancel) → log to a Data Table.
 
-**Nodes:**
-1. Schedule Trigger (every 5 minutes)
-2. Kalshi - Get Market
-3. IF - Check price threshold
-4. Send Email/Slack notification
-
-### 2. Automated Trading Strategy
-
-Execute trades based on conditions:
-
-**Nodes:**
-1. Schedule Trigger
-2. Kalshi - Get Markets (filter by criteria)
-3. Function - Analyze opportunities
-4. Kalshi - Create Order
-5. Database - Log trade
-
-### 3. Portfolio Dashboard
-
-Daily portfolio summary:
-
-**Nodes:**
-1. Schedule Trigger (daily at 9 AM)
-2. Kalshi - Get Balance
-3. Kalshi - Get Positions
-4. Kalshi - Get Fills
-5. Google Sheets - Update dashboard
-6. Email - Daily summary
-
-### 4. Market Scanner
-
-Find trading opportunities:
-
-**Nodes:**
-1. Kalshi - Get Markets (all open)
-2. Function - Filter by volume/spread
-3. Kalshi - Get Market Orderbook (for each)
-4. Function - Calculate metrics
-5. IF - Filter opportunities
-6. Notification - Alert on opportunities
-
-**See [EXAMPLE_WORKFLOWS.md](./EXAMPLE_WORKFLOWS.md) for detailed configurations!**
-
----
-
-## Documentation
-
-- **[QUICK_START.md](./QUICK_START.md)** - Get up and running in 5 minutes
-- **[COMPLETE_SETUP_GUIDE.md](./COMPLETE_SETUP_GUIDE.md)** - Detailed setup instructions
-- **[EXAMPLE_WORKFLOWS.md](./EXAMPLE_WORKFLOWS.md)** - 8 practical workflow examples
-- **[FILE_CHECKLIST.md](./FILE_CHECKLIST.md)** - Complete file checklist
-- **[Kalshi API Documentation](https://docs.kalshi.com)** - Official API docs
+**Daily portfolio summary:** Schedule Trigger → Kalshi *Portfolio > Get Balance* → *Position > Get Many* → *Portfolio > Get Fills* → Google Sheets / Email.
 
 ---
 
 ## Development
 
-### Setup Development Environment
+```bash
+git clone https://github.com/Vission01/n8n-nodes-kalshi-trading.git
+cd n8n-nodes-kalshi-trading
+npm install --ignore-scripts
+npm run build      # compile TypeScript to dist/
+npm run dev        # rebuild on change
+npm run format     # Prettier
+```
+
+`--ignore-scripts` skips a native build step in a dev dependency that isn't needed to compile the node.
+
+### Test in a local n8n
 
 ```bash
-# Clone the repository
-git clone https://github.com/yourusername/n8n-nodes-kalshi.git
-cd n8n-nodes-kalshi
-
-# Install dependencies
-npm install
-
-# Build
 npm run build
-
-# Watch mode for development
-npm run dev
-```
-
-### Testing Locally
-
-```bash
-# Link the package
 npm link
-
-# In your n8n directory
-npm link n8n-nodes-kalshi
-
-# Restart n8n to see changes
+cd ~/.n8n/nodes && npm link n8n-nodes-kalshi-trading
+# restart n8n
 ```
 
-### Building
+### Publish
 
 ```bash
-npm run build        # Build project
-npm run lint         # Run linter
-npm run lintfix      # Fix linting issues
-npm run format       # Format code with Prettier
-```
-
-### Publishing
-
-```bash
-# Update version
-npm version patch    # 1.0.0 -> 1.0.1
-npm version minor    # 1.0.0 -> 1.1.0
-npm version major    # 1.0.0 -> 2.0.0
-
-# Publish to npm
-npm publish
+npm version minor   # or patch / major
+npm publish         # runs the build first (prepublishOnly)
 ```
 
 ---
 
 ## Compatibility
 
-- **n8n version:** 0.198.0 or above
-- **Node.js version:** 18.0.0 or above
-- **Tested with:** n8n 1.0.0+
+- Built against `n8n-workflow` 1.x
+- Tested on self-hosted **n8n 2.42.2** (Node.js 26)
+- Uses the Kalshi Trade API v2, including the V2 order endpoints (`/portfolio/events/orders`)
 
 ---
 
 ## Resources
 
-### Kalshi
-- [Kalshi Homepage](https://kalshi.com)
-- [Kalshi API Documentation](https://docs.kalshi.com)
-- [Kalshi Trading Rules](https://kalshi.com/rules)
-- [Kalshi Learn Center](https://kalshi.com/learn)
+**Kalshi**
+- [Kalshi](https://kalshi.com)
+- [Kalshi API documentation](https://docs.kalshi.com)
+- [Kalshi regulatory documents (rulebook, member agreement)](https://kalshi.com/regulatory)
+- [Kalshi demo environment](https://demo.kalshi.co)
 
-### n8n
-- [n8n Homepage](https://n8n.io)
-- [n8n Documentation](https://docs.n8n.io)
-- [n8n Community Nodes](https://docs.n8n.io/integrations/community-nodes/)
-- [n8n Community Forum](https://community.n8n.io)
+**n8n**
+- [n8n](https://n8n.io)
+- [n8n documentation](https://docs.n8n.io)
+- [Community nodes](https://docs.n8n.io/integrations/community-nodes/)
+- [n8n community forum](https://community.n8n.io)
 
 ---
 
 ## Support
 
-### Issues and Feature Requests
-
-Please [open an issue](https://github.com/yourusername/n8n-nodes-kalshi/issues) on GitHub.
-
-### Questions
-
-- For n8n questions: [n8n Community Forum](https://community.n8n.io)
-- For Kalshi API questions: [Kalshi Documentation](https://docs.kalshi.com)
-
----
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+Report bugs or request features in [GitHub Issues](https://github.com/Vission01/n8n-nodes-kalshi-trading/issues).
 
 ---
 
 ## Changelog
 
-### Version 1.0.0 (2025-01-11)
+### 1.2.0
 
-#### Features
-- ✨ Complete Kalshi API v2 integration
-- 📊 Market data operations (6 operations)
-- 📅 Event operations (4 operations)
-- 💰 Order management (8 operations including batch)
-- 📈 Portfolio tracking (4 operations)
-- 🏛️ Exchange info (3 operations)
-- 📑 Series operations (2 operations)
-- 🔐 Secure authentication with API key signing (RSA/Ed25519)
-- 🌍 Support for Demo and Production environments
-- 📝 Comprehensive documentation and examples
-- 🎯 30+ total operations
+Kalshi retired several endpoints, which broke order placement and some market operations. This release moves the node to the current API.
 
-#### Documentation
-- Complete setup guide
-- 8 example workflows
-- Quick start guide
-- API reference
+**Fixed**
+- **Order > Create** now uses the V2 endpoint (`POST /portfolio/events/orders`). The old endpoint is rejected by Kalshi ("Please switch to the V2 endpoints").
+- **Order > Cancel / Decrease / Batch Create / Batch Cancel** now use the V2 endpoints.
+- **Market > Get History** returns candlesticks (the old `/history` endpoint returns 404).
+- **Market > Get Trades** uses `/markets/trades?ticker=` (the old path returns 404).
+- **Market > Get Many**: the status filter `Active` was rejected by Kalshi. Options are now Open (default), Unopened, Closed and Settled.
+- **Position > Get Many**: the count filter `Non-Zero` was rejected by Kalshi. Options are now All, Open Position and Ever Traded (existing workflows using `Non-Zero` are mapped automatically).
 
----
+**Changed**
+- **Price (Cents)** is now the price **of the selected side**. Previously it was always sent as the YES price, so a `No` order at 90 actually priced NO at 10¢.
 
-## Roadmap
+**Added**
+- Order options: **Time In Force**, **Post Only**, **Reduce Only**; Expiration TS now works with Good Till Canceled orders
+- **Market Ticker** field for Cancel and Decrease (shard routing)
+- History options: **Period** (1 min / 1 hour / 1 day), **Start TS**, **End TS**, **Series Ticker**
 
-Future enhancements planned:
+**Removed**
+- Order option **Sell Position Floor** (not supported by the V2 endpoint)
 
-- [ ] WebSocket support for real-time data
-- [ ] Advanced order types
-- [ ] Portfolio analytics
-- [ ] Strategy backtesting
-- [ ] Risk management tools
-- [ ] Multi-account support
-- [ ] Advanced filtering options
-- [ ] Export/import workflows
+### 1.1.0
+- Authenticate with a Kalshi API key and signed requests (RSA or Ed25519)
+- Copy the node icon into `dist` on build
 
 ---
 
 ## License
 
-[MIT](LICENSE.md)
-
-Copyright (c) 2025 n8n-nodes-kalshi Contributors
+[MIT](LICENSE)
 
 ---
 
 ## Disclaimer
 
-**⚠️ Important:**
+- This is an **unofficial** community node, **not affiliated** with Kalshi or n8n.
+- Use at your own risk. Test with the **Demo** environment first.
+- Automated trading can lose money quickly. The authors are not responsible for trading losses.
+- Read Kalshi's [regulatory documents](https://kalshi.com/regulatory) before trading.
 
-- This is an **unofficial** community node
-- **Not affiliated** with Kalshi or n8n
-- Use at your **own risk**
-- Always test with **Demo environment** first
-- Understand the **risks** of automated trading
-- The authors are **not responsible** for any trading losses
-- Read and understand [Kalshi's Terms of Service](https://kalshi.com/terms)
-
-**Trading involves risk. Only trade with funds you can afford to lose.**
-
----
-
-## Acknowledgments
-
-- Thanks to [Kalshi](https://kalshi.com) for their excellent API
-- Thanks to [n8n](https://n8n.io) for the amazing automation platform
-- Thanks to all contributors and users of this node
-
----
-
-## Star History
-
-If you find this project useful, please give it a ⭐ on GitHub!
-
----
-
-**Made with ❤️ for the n8n and Kalshi communities**
-
-**Happy Trading! 🚀**
+**Only trade with money you can afford to lose.**
